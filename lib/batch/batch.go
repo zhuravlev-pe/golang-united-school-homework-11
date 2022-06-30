@@ -14,11 +14,11 @@ func getOne(id int64) user {
 	return user{ID: id}
 }
 
-func getUsers(s, n int64, ch chan<- user, wg *sync.WaitGroup) {
+func getUsers(start, count int64, ch chan<- user, wg *sync.WaitGroup) {
 	defer wg.Done()
-	last := s + n
-	for ; s < last; s++ {
-		ch <- getOne(s)
+	last := start + count
+	for ; start < last; start++ {
+		ch <- getOne(start)
 	}
 }
 
@@ -36,9 +36,9 @@ func getBatch(n int64, pool int64) (res []user) {
 	for i := 0; i < int(pool); i++ {
 		batchCount := n - startId
 		batchCount = min(perPool, batchCount)
-		s := startId
+
 		wg.Add(1)
-		go getUsers(s, batchCount, ch, &wg)
+		go getUsers(startId, batchCount, ch, &wg)
 
 		startId += perPool
 	}
