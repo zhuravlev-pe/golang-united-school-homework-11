@@ -1,6 +1,7 @@
 package batch
 
 import (
+	"golang.org/x/sync/errgroup"
 	"sync"
 	"time"
 )
@@ -14,14 +15,6 @@ func getOne(id int64) user {
 	return user{ID: id}
 }
 
-func getUsers(start, count int64, ch chan<- user, wg *sync.WaitGroup) {
-	defer wg.Done()
-	last := start + count
-	for ; start < last; start++ {
-		ch <- getOne(start)
-	}
-}
-
 func getBatch(n int64, pool int64) (res []user) {
 	if pool < 1 {
 		pool = 1
@@ -29,36 +22,26 @@ func getBatch(n int64, pool int64) (res []user) {
 	if pool > n {
 		pool = n
 	}
-	ch := make(chan user)
-	wg := sync.WaitGroup{}
-	perPool := n / pool
-	var startId int64
-	for i := 0; i < int(pool); i++ {
-		batchCount := n - startId
-		batchCount = min(perPool, batchCount)
-
-		wg.Add(1)
-		go getUsers(startId, batchCount, ch, &wg)
-
-		startId += perPool
-	}
-
-	go func() {
-		wg.Wait()
-		close(ch)
-	}()
+	eg := errgroup.Group{}
+	eg.SetLimit(int(pool))
+	mx := sync.Mutex{}
 
 	result := make([]user, 0, n)
-	for u := range ch {
-		result = append(result, u)
+	for i := int64(0); i < n; i++ {
+		i := i
+		eg.Go(func() error {
+			u := getOne(i)
+			mx.Lock()
+			result = append(result, u)
+			mx.Unlock()
+			return nil
+		})
+
 	}
 
+	err := eg.Wait()
+	if err != nil {
+		panic(err)
+	}
 	return result
-}
-
-func min(a, b int64) int64 {
-	if a < b {
-		return a
-	}
-	return b
 }
